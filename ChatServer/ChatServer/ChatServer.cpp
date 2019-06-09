@@ -56,9 +56,9 @@ int main()
 #else
 	addrSrv.sin_addr.s_addr = INADDR_ANY;
 #endif
-
-	
 	addrSrv.sin_port = htons(port);//端口号
+
+
 	if (SOCKET_ERROR == bind(serverSocket, (sockaddr*)& addrSrv, sizeof(sockaddr))) {
 		printf("erro, bind port(%d)(%d) failed\n",port, addrSrv.sin_port);
 	}
@@ -78,15 +78,23 @@ int main()
 	// 6.通信
 	while (true)   //循环处理socket消息
 	{
-		//伯克利 BSD socket
+		// 伯克利 BSD socket
+		// fd_set最多可管理64个套接字
 		fd_set fdRead;  //描述符(socket)集合
 		fd_set fdWrite;
 		fd_set fdExp;
-		//清理集合
+		// FD_ZERO函数将集合初始化为空集合
 		FD_ZERO(&fdRead);
 		FD_ZERO(&fdWrite);
 		FD_ZERO(&fdExp);
-		//将描述符（socket）加入集合
+
+		/* 
+			赋值，此步必须做。
+			select函数返回后，会修改每个fd_set结构，删除那些不存在的没有完成I/O操作的套接字。
+			如果你不赋值，我删啥？我改啥？
+			在此步，可以有选择地赋值，也就是只把自己“感兴趣”的套接字加入集合。
+		 */
+		// FD_SET函数将套接字s加入set集合
 		FD_SET(serverSocket, &fdRead);
 		FD_SET(serverSocket, &fdWrite);
 		FD_SET(serverSocket, &fdExp);
@@ -99,12 +107,47 @@ int main()
 		//timeout参数若为NULL，select会阻塞!
 		//timeout设置为0，则不会阻塞，直接返回。
 		//timeout表示的是最大的一个时间值， 实际上并不一定会阻塞那么久。
-		timeval t = { 0,0 };
-		if (select(serverSocket + 1, &fdRead, &fdWrite, &fdExp, &t) < 0) {
+		// 通过该函数，可以判断套接字是否存在数据，或者能否向其写入数据。
+		// 
+		//timeval t = { 0,0 };
+		// select函数返回处于就绪状态并且已经包含在fd_set结构中的套接字总数
+		//int s_r = select(serverSocket + 1, &fdRead, &fdWrite, &fdExp, &t);
+		// 
+		// 如果没有，就算你前面再怎么FD_SET使得fd_count值变大，这里也会被置为0。
+
+		/*	readfds参数将包含符合下面任何一个条件的套接字：
+			1. 假如已经调用listen()函数，并且一个连接正在建立。那么此时调用accept()函数会成功。
+			   fd_count变为1，fd_array[0]变为服务器的socket值（因为此时还没有调用accept()函数获取客户端的socket值，连接尚未建立。）
+			2. 有数据可以读入。此时在该套接字上调用recv等输入函数，立即接受到对方的数据(非阻塞)。
+			   fd_count变为1，fd_array[0]变为客户端的socket值（因为连接已经建立了）。
+			3. 连接已经关闭、重设或中断。
+			如果一个都没有，就算你前面再怎么调用FD_SET函数使得fd_count值变大，这里也会被置为0。
+		*/
+		int s_r = select(serverSocket + 1, &fdRead, &fdWrite, &fdExp, NULL);
+		if (s_r < 0) {
 			printf("select finish\n");
 			break;
 		}
-		if (FD_ISSET(serverSocket, &fdRead)) {
+		else if (s_r == 0) {
+			/*
+			if (t.tv_sec == 0 && t.tv_usec == 0) {
+				// printf("无socket事件\n");
+			}
+			else {
+				printf("select函数调用超时\n");
+			}
+			*/
+		}
+		else {
+			printf("有socket事件发生\n");
+			// TODO: 判断是什么事件发生了
+		}
+
+
+		// 如果服务器本机的socket仍然在里面，说明有新的客户端请求连接，下面就要调用accept()函数完成连接了。
+		// FD_ISSET函数判断s是否是set集合的一名成员，如果是，返回true。
+		if (FD_ISSET(serverSocket, &fdRead)) {   
+			// FD_CLR函数将套接字s从set集合中删除。
 			FD_CLR(serverSocket, &fdRead);
 			sockaddr_in addr = { 0 };  //存客户端的网络地址
 			socklen_t addrlen = sizeof(sockaddr_in);
@@ -118,8 +161,18 @@ int main()
 				printf("accept success, new client: socket = %d, ip = %s\n", clientSocket, inet_ntoa(addr.sin_addr));
 			}
 		}
+
+
 		for (unsigned int i = 0; i < g_clients.size(); i++) {
-			if (FD_ISSET(g_clients[i], &fdRead)) {
+			if (FD_ISSET(g_clients[i], &fdRead)) {    //该套接字可读
+				if (-1 == processor(g_clients[i])) {
+					auto iter = g_clients.begin();
+					if (iter != g_clients.end()) {
+						g_clients.erase(iter);
+					}
+				}
+			}
+			if (FD_ISSET(g_clients[i], &fdWrite) ){    //该套接字可写
 				if (-1 == processor(g_clients[i])) {
 					auto iter = g_clients.begin();
 					if (iter != g_clients.end()) {
@@ -207,7 +260,12 @@ int  processor(SOCKET _cSock)
 
 		EnterGroupChatResult egcr;
 		egcr.result = 1;
-		send(_cSock, (char*)& egcr, sizeof(egcr), 0);
+		if (SOCKET_ERROR == send(_cSock, (char*)& egcr, sizeof(egcr), 0)) {
+			printf("发送失败\n");
+		}
+		else {
+			printf("发送成功\n");
+		}
 		break;
 	}
 	case CMD_EXIT_GROUP_CHAT: {

@@ -39,7 +39,7 @@ int cmdThread(SOCKET _sock);
 
 int main(int argc, char* argv[])
 {
-	char ip[16] = "127.0.0.1";
+	char ip[16] = "192.168.43.249";
 	if (argc == 2) {
 		strcpy(ip, argv[1]);  //将命令参数设为IP地址
 		printf("从命令行获取到IP参数，ip = %s\n", ip);
@@ -72,6 +72,7 @@ int main(int argc, char* argv[])
 #endif
 	
 	printf("prepare to connect %s:%d(%d)\n", inet_ntoa(name.sin_addr), port, name.sin_port);
+	// connect成功返回0，不成功返回-1。
 	if (SOCKET_ERROR == connect(_sock, (sockaddr*)& name, sizeof(sockaddr_in))) {
 		// linux环境下一直连接不成功，但是能ping通，为什么？
 		// ping通了只能说明icmp没有问题
@@ -86,6 +87,22 @@ int main(int argc, char* argv[])
 	else {
 		printf("connect socket success\n");
 	}
+
+	/*测试与公网服务器的连接*/
+	/*
+	char buf[] = "hi,server";
+	int i = 0,j=0;
+	while (true) {
+		int s_r = send(_sock, buf, sizeof(buf), 0);
+		if (SOCKET_ERROR == s_r) {
+			printf("%d发送失败\n",i++);
+		}
+		else {
+			printf("%d发送成功,长度%d\n",j++,s_r);
+		}
+	}
+	*/
+
 
 	// 启动线程函数
 	std::thread t1(cmdThread, _sock);
@@ -103,17 +120,33 @@ int main(int argc, char* argv[])
 		FD_SET(_sock, &fdRead);
 		FD_SET(_sock, &fdWrite);
 		FD_SET(_sock, &fdExp);
-		timeval t = { 0,0 };
-		if (select(_sock, &fdRead, &fdWrite, &fdExp, &t) < 0) {
+		// timeval t = { 0,0 };
+		// if (select(_sock, &fdRead, &fdWrite, &fdExp, &t) < 0) {
+		int s_r = select(_sock, &fdRead, &fdWrite, &fdExp, NULL);  //为什么没有阻塞？
+		if (s_r < 0) {
 			printf("select failed\n");
 			break;
 		}
+		else if (s_r == 0) {
+			printf("无socket事件\n");
+		}
+		else {
+			//printf("有socket事件\n");
+		}
+
+
 		if (FD_ISSET(_sock, &fdRead)) {    //判断_sock是不是在fdReads集合中
 			FD_CLR(_sock, &fdRead);
 			if (-1 == processor(_sock)) {
 				printf("processor failed\n");
 				break;
 			}
+		}
+
+
+		if (FD_ISSET(_sock, &fdWrite)) {    //判断_sock是不是在fdReads集合中
+			FD_CLR(_sock, &fdWrite);
+			//printf("有数据可以发出\n");
 		}
 		// TODO: 空闲时间处理其它业务
 	}
@@ -235,12 +268,25 @@ int cmdThread(SOCKET _sock) {
 			Login login;
 			scanf("%s", login.userName);
 			strcpy(g_userName, login.userName);
-			send(_sock, (const char*)& login, sizeof(login), 0);
+			int s_len = send(_sock, (const char*)& login, sizeof(login), 0);
+			if (s_len == SOCKET_ERROR) {
+				printf("发送失败！错误码：%d\n", WSAGetLastError());
+			}else{
+				printf("发送成功！发送长度=%d", s_len);
+			}
 		}
 		else if (0 == strcmp(cmdBuf, "egc")) {
 			EnterGroupChat egc;
 			strcpy(egc.userName, g_userName);
-			send(_sock, (const char*)& egc, sizeof(egc), 0);
+
+			/* MSG_OOB、MSG_PEEK、MSG_DONTROUTE：https://blog.csdn.net/zhubosa/article/details/38295149 */
+			int s_len = send(_sock, (const char*)& egc, sizeof(egc), 0);
+			if (s_len == SOCKET_ERROR) {
+				printf("发送失败！错误码：%d\n", WSAGetLastError());
+			}
+			else {
+				printf("发送成功！发送长度=%d\n", s_len);
+			}
 		}
 		else if (0 == strcmp(cmdBuf, "eegc")) {
 			ExitGroupChat egc;
