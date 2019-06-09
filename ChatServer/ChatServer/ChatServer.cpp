@@ -1,8 +1,14 @@
-﻿#define _WINSOCK_DEPRECATED_NO_WARNINGS
-#define _CRT_SECURE_NO_WARNINGS
+﻿#ifdef _WIN32
+	#define _WINSOCK_DEPRECATED_NO_WARNINGS
+	#define _CRT_SECURE_NO_WARNINGS
+	#include <winsock2.h>
+	#include <Windows.h>
+#else
 
-#include <winsock2.h>
-#include <Windows.h>
+#endif
+
+
+
 #include <inaddr.h>
 #pragma comment(lib, "ws2_32")
 
@@ -18,6 +24,8 @@ int  processor(SOCKET _cSock);
 
 int main()
 {
+	unsigned short port = 10086;
+
 	// 1.请求版本号
 	WSADATA wsaData;
 	int err = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -38,22 +46,23 @@ int main()
 	// 3.创建协议地址族
 	SOCKADDR_IN addrSrv = { 0 };
 	addrSrv.sin_family = AF_INET;
-	addrSrv.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");//IP地址
-	addrSrv.sin_port = htons(6600);//端口号
+	// 如果是服务端，就别用127.0.0.1，这是回环地址。
+	addrSrv.sin_addr.S_un.S_addr = INADDR_ANY;//IP地址
+	addrSrv.sin_port = htons(port);//端口号
 	if (SOCKET_ERROR == bind(serverSocket, (SOCKADDR*)& addrSrv, sizeof(SOCKADDR))) {
-		printf("erro, bind port failed\n");
+		printf("erro, bind port(%d)(%d) failed\n",port, addrSrv.sin_port);
 	}
 	else {
-		printf("bind port success\n");
+		printf("bind port(%d)(%d) success\n",port, addrSrv.sin_port);
 	}
 
 
 	// 5.监听
 	if (SOCKET_ERROR == listen(serverSocket, 10)) { //监听数：10
-		printf("listen port failed\n");
+		printf("listen port(%d)(%d) failed\n", port, addrSrv.sin_port);
 	}
 	else {
-		printf("listen port success\n");
+		printf("listen port(%d)(%d) success\n",port, addrSrv.sin_port);
 	}
 
 	// 6.通信
@@ -155,7 +164,8 @@ int  processor(SOCKET _cSock)
 		printf("%s 加入群聊\n", egc->userName);
 
 		BroadcastMessage bm;
-		char bMessage[256] = {};
+		char bMessage[256];
+		memset(bMessage, '\0', sizeof(bMessage));
 		strcat(bMessage, egc->userName);
 		strcat(bMessage, "加入群聊");
 		strcpy(bm.bMessage,bMessage);

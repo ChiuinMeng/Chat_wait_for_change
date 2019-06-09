@@ -1,13 +1,23 @@
-﻿#define _WINSOCK_DEPRECATED_NO_WARNINGS
-#define _CRT_SECURE_NO_WARNINGS
+﻿// Linux环境编译命令：
+//     g++ -o ChatClient ChatClient.cpp -pthread
 
-#include <winsock2.h>
-#include <Windows.h>
-#include <inaddr.h>
-#pragma comment(lib, "ws2_32")
-
+#ifdef _WIN32
+	#define _WINSOCK_DEPRECATED_NO_WARNINGS
+	#define _CRT_SECURE_NO_WARNINGS
+	#include <winsock2.h>
+	#include <Windows.h>
+	#include <inaddr.h>
+	#pragma comment(lib, "ws2_32")
+#else
+	#include<unistd.h> //uni std
+	#include<arpa/inet.h>
+	typedef unsigned int SOCKET;
+	#define INVALID_SOCKET  (SOCKET)(~0)
+	#define SOCKET_ERROR            (-1)
+#endif
 #include <iostream>
 #include <thread>
+#include <cstring>
 
 #include "DataPacket.h"
 
@@ -27,12 +37,20 @@ int  g_status = STATUS_DEFAULT; //客户端状态
 int processor(SOCKET _cSock);
 int cmdThread(SOCKET _sock);
 
-int main()
+int main(int argc, char* argv[])
 {
-	// 启动Windows socket 2.x环境
-	WORD ver = MAKEWORD(2, 2);
+	char ip[16] = "127.0.0.1";
+	if (argc == 2) {
+		strcpy(ip, argv[1]);  //将命令参数设为IP地址
+		printf("从命令行获取到IP参数，ip = %s\n", ip);
+	}
+	unsigned short port = 10086;
+
+#ifdef _WIN32
 	WSADATA dat;
-	WSAStartup(ver, &dat);
+	// 启动Windows socket 2.x环境
+	WSAStartup(MAKEWORD(2, 2), &dat);
+#endif
 
 	// 创建socket套接字
 	SOCKET _sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -44,11 +62,24 @@ int main()
 	}
 
 	// 连接socket
-	sockaddr_in name = { 0 };
+	sockaddr_in name = {};
 	name.sin_family = AF_INET;
-	name.sin_port = htons(6600);
-	name.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");
+	name.sin_port = htons(port);
+#ifdef _WIN32
+	name.sin_addr.S_un.S_addr = inet_addr(ip);
+#else
+	name.sin_addr.s_addr = inet_addr(ip);
+#endif
+	
+	printf("prepare to connect %s:%d(%d)\n", inet_ntoa(name.sin_addr), port, name.sin_port);
 	if (SOCKET_ERROR == connect(_sock, (sockaddr*)& name, sizeof(sockaddr_in))) {
+		// linux环境下一直连接不成功，但是能ping通，为什么？
+		// ping通了只能说明icmp没有问题
+		// connect 连不上，可能的原因很多，
+		//	1.防火墙限制
+		//	2.路由器限制
+		//	3.还有就是对方没有开此端口
+		//  4.***.sin_addr.S_un.S_addr = INADDR_ANY;//服务端的这个IP地址不是127.0.0.1！
 		printf("connect socket failed\n");
 		g_bRun = false;
 	}
@@ -87,10 +118,12 @@ int main()
 		// TODO: 空闲时间处理其它业务
 	}
 
-
-	// 收尾工作
+#ifdef _WIN32
 	closesocket(_sock);
 	WSACleanup();
+#else
+	close(_sock);
+#endif
 	getchar();
 	return 0;
 }
@@ -112,6 +145,7 @@ int  processor(SOCKET _cSock)
 	recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);//再接受数据体
 
 	// 2. 根据数据头中的命令，选择不同分支，处理不同请求。
+	printf("CMD = %d, dLen = %d\n", header->cmd, header->dataLength); //测试，发布时要注释掉
 	switch (header->cmd) {
 	case CMD_LOGIN_RESULT: {
 		LoginResult* login = (LoginResult*)szRecv;
