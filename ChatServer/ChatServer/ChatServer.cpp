@@ -71,7 +71,7 @@ int main()
 		FD_SET(serverSocket, &fdRead);
 		FD_SET(serverSocket, &fdWrite);
 		FD_SET(serverSocket, &fdExp);
-		for (int n = 0; n < g_clients.size(); n++) {
+		for (unsigned int n = 0; n < g_clients.size(); n++) {
 			FD_SET(g_clients[n], &fdRead);
 		}
 
@@ -99,7 +99,7 @@ int main()
 				printf("accept success, new client: socket = %d, ip = %s\n", clientSocket, inet_ntoa(addr.sin_addr));
 			}
 		}
-		for (int n = 0; n < fdRead.fd_count; n++) {
+		for (unsigned int n = 0; n < fdRead.fd_count; n++) {
 			if (-1 == processor(fdRead.fd_array[n])) {  //处理客户端请求
 				auto iter = find(g_clients.begin(), g_clients.end(), fdRead.fd_array[n]);
 				if (iter != g_clients.end()) {
@@ -161,7 +161,7 @@ int  processor(SOCKET _cSock)
 		strcpy(bm.bMessage,bMessage);
 		strcpy(bm.userName, egc->userName);
 		bm.userID = _cSock;
-		for (int i = 0; i < g_clients.size(); i++) {
+		for (unsigned int i = 0; i < g_clients.size(); i++) {
 			if (g_clients[i] == _cSock)continue;
 			send(g_clients[i], (char*)& bm, sizeof(BroadcastMessage), 0);//?
 		}
@@ -183,7 +183,7 @@ int  processor(SOCKET _cSock)
 		strcpy(bm.bMessage, bMessage);
 		strcpy(bm.userName, egc->userName);
 		bm.userID = _cSock;
-		for (int i = 0; i < g_clients.size(); i++) {
+		for (unsigned int i = 0; i < g_clients.size(); i++) {
 			if (g_clients[i] == _cSock)continue;
 			send(g_clients[i], (char*)&bm, sizeof(BroadcastMessage), 0);
 		}
@@ -198,7 +198,7 @@ int  processor(SOCKET _cSock)
 		printf("用户:%s 发送群聊消息:%s", bm->userName, bm->bMessage);
 		bm->userID = _cSock;
 
-		for (int i = 0; i < g_clients.size(); i++) {
+		for (unsigned int i = 0; i < g_clients.size(); i++) {
 			if (g_clients[i] == _cSock)continue;
 			send(g_clients[i], szRecv, sizeof(BroadcastMessage), 0);
 		}
@@ -211,7 +211,7 @@ int  processor(SOCKET _cSock)
 		printf("client<%d>:CMD_CHAT_WITH_USER ，dLen: %d\n", _cSock, header->dataLength);
 		ChatWithUser* cwu = (ChatWithUser*)szRecv;
 
-		int i = 0;
+		unsigned int i = 0;
 		for (; i < g_clients.size(); i++) {
 			if (g_clients[i] == _cSock)continue;
 			if (g_clients[i] == cwu->receiverID)break;
@@ -228,7 +228,7 @@ int  processor(SOCKET _cSock)
 		UserMessage* um = (UserMessage*)szRecv;
 		um->senderID = _cSock;
 
-		int i = 0;
+		unsigned int i = 0;
 		for (; i < g_clients.size(); i++) {
 			if (g_clients[i] == um->receiverID) {
 				send(g_clients[i], szRecv, sizeof(UserMessage), 0);
@@ -250,4 +250,5 @@ int  processor(SOCKET _cSock)
 		send(_cSock, (char*)& h, sizeof(h), 0);
 		break;
 	}
+	return 0;
 }

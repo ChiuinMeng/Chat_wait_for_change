@@ -172,6 +172,7 @@ int  processor(SOCKET _cSock)
 		printf("收到未知命令;%d, 长度:%d\n", header->cmd, header->dataLength);
 		break;
 	}
+	return 0;
 };
 
 /*
@@ -243,4 +244,5 @@ int cmdThread(SOCKET _sock) {
 			}
 		}
 	}
+	return 0;
 }
